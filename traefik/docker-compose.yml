@@ -1,0 +1,27 @@
+name: homelab-traefik
+
+services:
+  traefik:
+    image: traefik:v3.6.5
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Retain the environment variable name used by the existing deployment.
+      CLOUDFLARE_DNS_API_TOKEN: ${TRAEFIK_CF_API_TOKEN} # Set in the .env file
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./data/acme.json:/acme.json
+      - ./dynamic:/etc/traefik/dynamic:ro
+    networks:
+      - public
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  public:
+    external: true
+    name: traefik_public

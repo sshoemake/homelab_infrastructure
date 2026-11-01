@@ -1,0 +1,14 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Traefik ACME account and certificate storage
+traefik/data/acme.json
+traefik/data/*.json
+
+# Local/editor/OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp

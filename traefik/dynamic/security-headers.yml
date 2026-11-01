@@ -1,0 +1,9 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 63072000
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        forceSTSHeader: true
