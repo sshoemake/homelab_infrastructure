@@ -23,7 +23,7 @@ readonly COMPOSE_PROD="${PROJECT_DIR}/compose/docker-compose.prod.yml"
 readonly ENV_FILE="${PROJECT_DIR}/compose/.env.prod"
 readonly IMAGE_REPOSITORY="ghcr.io/sshoemake/meal_project"
 readonly BACKUP_DIR="${MEAL_PROJECT_BACKUP_DIR:-${HOME}/backups/meal_project}"
-readonly HEALTHCHECK_URL="${MEAL_PROJECT_HEALTHCHECK_URL:-}"
+readonly HEALTHCHECK_URL="${MEAL_PROJECT_HEALTHCHECK_URL:-https://sshoemake.com/}"
 
 log()  { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 die()  { log "ERROR: $*"; exit 1; }
@@ -178,10 +178,13 @@ if [[ -n "${HEALTHCHECK_URL}" ]]; then
     [[ "${HEALTHCHECK_URL}" == https://* ]] \
         || die "MEAL_PROJECT_HEALTHCHECK_URL must use HTTPS."
     log "Checking public HTTPS endpoint"
+
     curl --fail --silent --show-error --location \
         --retry 12 --retry-delay 5 --retry-connrefused \
         --max-time 15 "${HEALTHCHECK_URL}" >/dev/null \
         || die "HTTPS health check failed. Database backup: ${BACKUP_FILE}"
+
+    log "Public HTTPS health check passed."
 else
     warn "MEAL_PROJECT_HEALTHCHECK_URL is not set; public HTTPS verification was skipped."
 fi
