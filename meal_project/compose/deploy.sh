@@ -133,7 +133,7 @@ log "Creating PostgreSQL backup"
 [[ -s "${TEMP_BACKUP}" ]] || die "Database backup is empty; deployment stopped."
 
 # Confirm that PostgreSQL can read the custom-format archive.
-"${COMPOSE[@]}" exec -T db pg_restore --list - < "${TEMP_BACKUP}" >/dev/null \
+"${COMPOSE[@]}" exec -T db pg_restore --list < "${TEMP_BACKUP}" >/dev/null \
     || die "Database backup validation failed; deployment stopped."
 
 mv -- "${TEMP_BACKUP}" "${BACKUP_FILE}"
