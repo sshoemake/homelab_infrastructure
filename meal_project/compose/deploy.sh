@@ -2,8 +2,8 @@
 #
 # Deploy a versioned Meal_Project release to the Odroid host.
 #
-# Run from the repository root:
-#   ./compose/deploy.sh v2.2.6
+# Run from the infrastructure repository root:
+#   ./meal_project/compose/deploy.sh v2.2.6
 #
 # Optional public HTTPS check:
 #   MEAL_PROJECT_HEALTHCHECK_URL="https://your-domain.example/" \
@@ -63,10 +63,13 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
 export MEAL_PROJECT_IMAGE="${IMAGE_REPOSITORY}"
 export MEAL_PROJECT_VERSION="${RELEASE_TAG}"
 
+readonly COMPOSE_PROJECT_NAME="compose"
+
 COMPOSE=(
     docker compose
     --project-directory "${PROJECT_DIR}"
     --env-file "${ENV_FILE}"
+    -p "${COMPOSE_PROJECT_NAME}"
     -f "${COMPOSE_BASE}"
     -f "${COMPOSE_PROD}"
 )
