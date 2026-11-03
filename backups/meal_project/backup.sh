@@ -64,6 +64,9 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
 # Use the same Compose configuration as deploy.sh.
 readonly COMPOSE_PROJECT_NAME="compose"
 
+export MEAL_PROJECT_IMAGE="ghcr.io/sshoemake/meal_project"
+export MEAL_PROJECT_VERSION="backup"
+
 COMPOSE=(
     docker compose
     --project-directory "${PROJECT_DIR}"
