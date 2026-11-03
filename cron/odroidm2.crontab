@@ -8,6 +8,6 @@
 */5 * * * * /home/odroid/homelab_infrastructure/cloudflare/run_ddns.sh >> /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.log 2>&1
 
 # Meal Project PostgreSQL weekly backup
-# Every Sunday at 11:00 PM
+# Every Sunday at 11:00 PM Arizona time (Monday 06:00 UTC)
 
-0 23 * * 7 /home/odroid/homelab_infrastructure/backups/meal_project/backup.sh >> /home/odroid/backups/meal_project/backup.log 2>&1
+0 6 * * 1 /home/odroid/homelab_infrastructure/backups/meal_project/backup.sh >> /home/odroid/backups/meal_project/backup.log 2>&1
