@@ -1,0 +1,12 @@
+# ==========================================================
+# Odroid M2 - Scheduled Tasks
+# Managed in homelab_infrastructure
+# ==========================================================
+
+# Cloudflare Dynamic DNS
+# Check public IP every 5 minutes
+*/5 * * * * /usr/bin/python3 /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.py >> /home/odroid/cloudflare/cloudflare_ddns.log 2>&1
+
+# Meal Project data backup
+# Every Sunday at 11:00 PM
+0 23 * * 7 /home/odroid/mp_data_backup/mp_data_backup.sh >> /home/odroid/mp_data_backup/mp_data_backup.log 2>&1
