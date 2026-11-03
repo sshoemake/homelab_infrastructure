@@ -74,6 +74,16 @@ COMPOSE=(
     -f "${COMPOSE_PROD}"
 )
 
+# Prevent overlapping Meal_Project operations.
+mkdir -p -- "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}"
+
+exec 9>"${BACKUP_DIR}/operation.lock"
+
+if ! flock -n 9; then
+    die "Another Meal_Project operation is already running."
+fi
+
 TEMP_BACKUP=""
 cleanup() {
     if [[ -n "${TEMP_BACKUP}" && -f "${TEMP_BACKUP}" ]]; then

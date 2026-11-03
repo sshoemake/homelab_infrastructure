@@ -43,14 +43,14 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Prevent overlapping backups.
+# Prevent overlapping Meal_Project operations.
 mkdir -p -- "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
-exec 9>"${BACKUP_DIR}/backup.lock"
+exec 9>"${BACKUP_DIR}/operation.lock"
 
 if ! flock -n 9; then
-    die "Another Meal_Project backup is already running."
+    die "Another Meal_Project operation is already running."
 fi
 
 # Validate required configuration.

@@ -23,6 +23,17 @@ readonly ENV_FILE="${PROJECT_DIR}/compose/.env.prod"
 
 readonly BACKUP_DIR="${MEAL_PROJECT_BACKUP_DIR:-${HOME}/backups/meal_project}"
 
+# Prevent overlapping Meal_Project operations.
+mkdir -p -- "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}"
+
+exec 9>"${BACKUP_DIR}/operation.lock"
+
+if ! flock -n 9; then
+    log "ERROR: Another Meal_Project operation is already running."
+    exit 1
+fi
+
 DB_NAME=""
 DB_OWNER=""
 
