@@ -2,7 +2,6 @@
 /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.log {
     weekly
     rotate 4
-    maxsize 1M
     compress
     delaycompress
     missingok

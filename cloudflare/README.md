@@ -24,6 +24,17 @@ cloudflare/
 └── README.md
 ```
 
+## System prerequisites
+
+The Cloudflare DDNS script requires Python 3.14 and the
+Python venv package.
+
+Install the system dependencies:
+
+```bash
+sudo apt update
+sudo apt install python3.14 python3.14-venv
+
 ## Configuration
 
 Copy `.env.example` to `.env` and populate the
