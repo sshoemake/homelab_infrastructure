@@ -36,16 +36,12 @@ readonly COMPOSE_PROJECT_NAME="compose"
 
 DB_NAME=""
 DB_OWNER=""
-TEST_DB=""
 PRESERVED_DB=""
 
 TEMP_BACKUP=""
 EMERGENCY_BACKUP=""
 
 WEB_STOPPED=false
-DB_CONNECTIONS_DISABLED=false
-OLD_DB_RENAMED=false
-NEW_DB_CREATED=false
 
 log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -69,76 +65,156 @@ docker_compose() {
 cleanup() {
     local exit_code=$?
     local rollback_ok=true
+    local need_web_start=false
+    local production_state=""
+    local preserved_state=""
 
     trap - EXIT INT TERM
     set +e
 
-    if (( exit_code != 0 )); then
-        log "Restore failed. Attempting rollback."
+    if (( exit_code != 0 )) &&
+        [[ -n "${DB_NAME}" ]] &&
+        [[ -n "${DB_OWNER}" ]] &&
+        [[ -n "${PRESERVED_DB}" ]]; then
 
-        if [[ "${OLD_DB_RENAMED}" == true ]]; then
+        log "Restore failed. Inspecting PostgreSQL database state."
 
-            # Ensure the web service cannot connect during rollback.
-            docker_compose stop web >/dev/null 2>&1
-            WEB_STOPPED=true
+        # Read the actual state of both databases.
+        production_state="$(
+            docker_compose exec -T db \
+                psql -X -A -t -v ON_ERROR_STOP=1 \
+                -U "${DB_OWNER}" -d postgres \
+                -c "SELECT COALESCE((SELECT datallowconn::text FROM pg_database WHERE datname = '${DB_NAME}'), 'missing');"
+        )"
 
-            # Remove the partially restored production database.
-            if [[ "${NEW_DB_CREATED}" == true ]]; then
-                log "Removing partially restored production database."
+        if (( $? != 0 )); then
+            log "ERROR: Could not inspect production database state."
+            rollback_ok=false
+        fi
 
-                docker_compose exec -T db \
-                    dropdb --if-exists --force \
-                    -U "${DB_OWNER}" "${DB_NAME}"
+        preserved_state="$(
+            docker_compose exec -T db \
+                psql -X -A -t -v ON_ERROR_STOP=1 \
+                -U "${DB_OWNER}" -d postgres \
+                -c "SELECT COALESCE((SELECT datallowconn::text FROM pg_database WHERE datname = '${PRESERVED_DB}'), 'missing');"
+        )"
+
+        if (( $? != 0 )); then
+            log "ERROR: Could not inspect preserved database state."
+            rollback_ok=false
+        fi
+
+        if [[ "${rollback_ok}" == true ]]; then
+            log "Production database state: ${production_state}"
+            log "Preserved database state: ${preserved_state}"
+
+            # Determine whether the web service needs restarting.
+            if [[ "${WEB_STOPPED}" == true ]] ||
+                [[ "${production_state}" == "false" ]]
+                [[ "${preserved_state}" != "missing" ]]; then
+                need_web_start=true
+            fi
+
+            # Stop web before manipulating production databases.
+            if [[ "${need_web_start}" == true ]]; then
+                docker_compose stop web
 
                 if (( $? != 0 )); then
-                    log "ERROR: Could not remove the failed production database."
+                    log "ERROR: Could not stop web service for rollback."
                     rollback_ok=false
                 fi
             fi
+        fi
 
-            # Restore the original database name.
+        if [[ "${rollback_ok}" == true ]]; then
+
+            if [[ "${preserved_state}" != "missing" ]]; then
+
+                # The original database was renamed.
+                # Remove the incomplete replacement if it exists.
+                if [[ "${production_state}" != "missing" ]]; then
+                    log "Removing incomplete replacement production database."
+
+                    docker_compose exec -T db \
+                        dropdb --if-exists --force \
+                        -U "${DB_OWNER}" "${DB_NAME}"
+
+                    if (( $? != 0 )); then
+                        log "ERROR: Could not remove incomplete production database."
+                        rollback_ok=false
+                    fi
+                fi
+
+                # Restore the original database name.
+                if [[ "${rollback_ok}" == true ]]; then
+                    log "Restoring original production database name."
+
+                    docker_compose exec -T db \
+                        psql -X -v ON_ERROR_STOP=1 \
+                        -U "${DB_OWNER}" -d postgres \
+                        -c "ALTER DATABASE \"${PRESERVED_DB}\" RENAME TO \"${DB_NAME}\";"
+
+                    if (( $? != 0 )); then
+                        log "ERROR: Could not restore original database name."
+                        rollback_ok=false
+                    fi
+                fi
+
+            elif [[ "${production_state}" == "missing" ]]; then
+
+                log "ERROR: Neither original nor replacement production database exists."
+                rollback_ok=false
+
+            fi
+
+            # Re-enable connections to the original production database.
             if [[ "${rollback_ok}" == true ]]; then
-                log "Restoring original database name."
+                log "Re-enabling production database connections."
 
                 docker_compose exec -T db \
                     psql -X -v ON_ERROR_STOP=1 \
                     -U "${DB_OWNER}" -d postgres \
-                    -c "ALTER DATABASE \"${PRESERVED_DB}\" RENAME TO \"${DB_NAME}\";"
+                    -c "ALTER DATABASE \"${DB_NAME}\" WITH ALLOW_CONNECTIONS true;"
 
                 if (( $? != 0 )); then
-                    log "ERROR: Could not rename the preserved database."
+                    log "ERROR: Could not re-enable production database connections."
                     rollback_ok=false
-                else
-                    docker_compose exec -T db \
-                        psql -X -v ON_ERROR_STOP=1 \
-                        -U "${DB_OWNER}" -d postgres \
-                        -c "ALTER DATABASE \"${DB_NAME}\" WITH ALLOW_CONNECTIONS true;"
-
-                    if (( $? != 0 )); then
-                        log "ERROR: Could not re-enable database connections."
-                        rollback_ok=false
-                    fi
                 fi
-            fi
-
-        elif [[ "${DB_CONNECTIONS_DISABLED}" == true ]]; then
-
-            # Database was disabled but not renamed.
-            docker_compose exec -T db \
-                psql -X -v ON_ERROR_STOP=1 \
-                -U "${DB_OWNER}" -d postgres \
-                -c "ALTER DATABASE \"${DB_NAME}\" WITH ALLOW_CONNECTIONS true;"
-
-            if (( $? != 0 )); then
-                log "ERROR: Could not re-enable database connections."
-                rollback_ok=false
             fi
         fi
 
-        # Restart the web service only if rollback is safe.
-        if [[ "${WEB_STOPPED}" == true || "${OLD_DB_RENAMED}" == true ]]; then
+        # Verify that the restored original database is accessible.
+        if [[ "${rollback_ok}" == true ]]; then
+            log "Verifying original production database accessibility."
+
+            docker_compose exec -T db \
+                pg_isready -U "${DB_OWNER}" -d "${DB_NAME}" \
+                >/dev/null
+
+            if (( $? != 0 )); then
+                log "ERROR: Original production database is not accepting connections."
+                rollback_ok=false
+            fi
+
             if [[ "${rollback_ok}" == true ]]; then
-                log "Starting web service after rollback."
+                RESULT="$(
+                    docker_compose exec -T db \
+                        psql -X -A -t -v ON_ERROR_STOP=1 \
+                        -U "${DB_OWNER}" -d "${DB_NAME}" \
+                        -c "SELECT 1;"
+                )"
+
+                if (( $? != 0 )) || [[ "${RESULT}" != "1" ]]; then
+                    log "ERROR: Original production database query verification failed."
+                    rollback_ok=false
+                fi
+            fi
+        fi
+
+        # Restart web only after the original database is verified.
+        if [[ "${need_web_start}" == true ]]; then
+            if [[ "${rollback_ok}" == true ]]; then
+                log "Starting web service after successful rollback."
 
                 docker_compose start web
 
@@ -153,12 +229,14 @@ cleanup() {
         fi
 
         if [[ "${rollback_ok}" == true ]]; then
-            log "Rollback completed."
+            log "Rollback completed successfully."
+            log "Original production database is accessible."
         else
             log "WARNING: Rollback was incomplete. Manual intervention is required."
         fi
     fi
 
+    # Remove an incomplete temporary emergency backup.
     if [[ -n "${TEMP_BACKUP}" && -f "${TEMP_BACKUP}" ]]; then
         rm -f -- "${TEMP_BACKUP}"
     fi
@@ -185,7 +263,7 @@ for file in "${COMPOSE_BASE}" "${COMPOSE_PROD}" "${ENV_FILE}"; do
     [[ -f "${file}" ]] || die "Required file not found: ${file}"
 done
 
-for command in docker curl flock; do
+for command in docker curl flock seq; do
     command -v "${command}" >/dev/null 2>&1 \
         || die "Required command not found: ${command}"
 done
@@ -193,14 +271,14 @@ done
 docker compose version >/dev/null 2>&1 \
     || die "Docker Compose v2 is required."
 
-# Prevent overlap with the weekly backup script.
+# Prevent overlapping Meal_Project operations.
 mkdir -p -- "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
-exec 9>"${BACKUP_DIR}/backup.lock"
+exec 9>"${BACKUP_DIR}/operation.lock"
 
 flock -n 9 \
-    || die "Another Meal_Project backup operation is running."
+    || die "Another Meal_Project operation is already running."
 
 # Initial Compose interpolation. The actual running image is identified below.
 export MEAL_PROJECT_IMAGE="${IMAGE_REPOSITORY}"
@@ -298,9 +376,10 @@ read -r CONFIRMATION
 # Stop application writes.
 log "Stopping Meal_Project web service."
 
-WEB_STOPPED=true
 docker_compose stop web \
     || die "Could not stop web service."
+
+WEB_STOPPED=true
 
 # Create an emergency backup of the current production database.
 log "Creating emergency production backup."
@@ -326,8 +405,6 @@ log "Emergency backup created: ${EMERGENCY_BACKUP}"
 # Prevent new connections to the original production database.
 log "Disabling connections to the original production database."
 
-DB_CONNECTIONS_DISABLED=true
-
 docker_compose exec -T db \
     psql -X -v ON_ERROR_STOP=1 \
     -U "${DB_OWNER}" -d postgres \
@@ -352,17 +429,12 @@ docker_compose exec -T db \
     -c "ALTER DATABASE \"${DB_NAME}\" RENAME TO \"${PRESERVED_DB}\";" \
     || die "Could not rename original production database."
 
-OLD_DB_RENAMED=true
-DB_CONNECTIONS_DISABLED=false
-
 # Create the replacement production database.
 log "Creating fresh production database."
 
 docker_compose exec -T db \
     createdb -U "${DB_OWNER}" -T template0 -O "${DB_OWNER}" "${DB_NAME}" \
     || die "Could not create replacement production database."
-
-NEW_DB_CREATED=true
 
 # Restore the selected archive.
 log "Restoring selected backup into production database."

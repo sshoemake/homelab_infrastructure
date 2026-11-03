@@ -49,7 +49,7 @@ readonly RELEASE_TAG="$1"
 [[ "${RELEASE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] \
     || die "Invalid release tag: ${RELEASE_TAG}"
 
-for command in docker curl; do
+for command in docker curl flock seq grep mktemp; do
     command -v "${command}" >/dev/null 2>&1 || die "Required command not found: ${command}"
 done
 
