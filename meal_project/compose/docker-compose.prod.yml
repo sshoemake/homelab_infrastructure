@@ -1,0 +1,45 @@
+services:
+  web:
+    image: ${MEAL_PROJECT_IMAGE}:${MEAL_PROJECT_VERSION}
+    restart: always
+    env_file: .env.prod
+    depends_on:
+      - db
+    networks:
+      - traefik_public
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_public"
+      - "traefik.http.routers.web.rule=Host(`sshoemake.com`) || Host(`www.sshoemake.com`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls=true"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.web.middlewares=security-headers@file"
+      - "traefik.http.services.web.loadbalancer.server.port=8000"
+      - "traefik.http.services.web.loadbalancer.server.scheme=http"
+
+  db:
+    image: postgres:18
+    container_name: myapp-db
+    restart: always
+    env_file: .env.prod
+    volumes:
+      - pg_data:/var/lib/postgresql/18/docker
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  traefik_public:
+    external: true
+    name: traefik_public
+  internal:
+    internal: true
+
+volumes:
+  pg_data:

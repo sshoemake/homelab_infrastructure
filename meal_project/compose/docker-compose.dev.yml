@@ -1,0 +1,28 @@
+
+services:
+  
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_container
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: your_pgadmin_password
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+
+  db:
+    image: postgres:18
+    container_name: myapp-db
+    restart: always
+    env_file: .env.dev
+    volumes:
+      - pg_data:/var/lib/postgresql/18/docker
+    ports:
+      - "5432:5432"  # only really used in dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

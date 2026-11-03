@@ -1,0 +1,39 @@
+
+services:
+
+  web:
+    image: meal_project:latest
+    build:
+      context: . # The build context is the current directory
+    restart: always
+    env_file: .env.uat
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    networks:
+      - public
+      - internal
+
+  db:
+    image: postgres:18
+    container_name: myapp-db
+    restart: unless-stopped
+    env_file: .env.uat
+    volumes:
+      - pg_data:/var/lib/postgresql/18/docker
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  public:
+  internal:
+    internal: true
+
+volumes:
+  pg_data:
