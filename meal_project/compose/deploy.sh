@@ -7,11 +7,11 @@
 #
 # Optional public HTTPS check:
 #   MEAL_PROJECT_HEALTHCHECK_URL="https://your-domain.example/" \
-#     ./compose/deploy.sh v2.2.6
+#     ./meal_project/compose/deploy.sh v2.2.6
 #
 # Optional backup location:
 #   MEAL_PROJECT_BACKUP_DIR="$HOME/backups/meal_project" \
-#     ./compose/deploy.sh v2.2.6
+#     ./meal_project/compose/deploy.sh v2.2.6
 #
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -32,10 +32,10 @@ warn() { log "WARNING: $*"; }
 usage() {
     cat <<'EOF'
 Usage:
-  ./compose/deploy.sh <release-tag>
+  ./meal_project/compose/deploy.sh <release-tag>
 
 Example:
-  ./compose/deploy.sh v2.2.6
+  ./meal_project/compose/deploy.sh v2.2.6
 
 Optional environment variables:
   MEAL_PROJECT_BACKUP_DIR       Backup directory (default: ~/backups/meal_project)
