@@ -5,7 +5,7 @@
 
 # Cloudflare Dynamic DNS
 # Check public IP every 5 minutes
-*/5 * * * * /usr/bin/python3 /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.py >> /home/odroid/cloudflare/cloudflare_ddns.log 2>&1
+*/5 * * * * /home/odroid/homelab_infrastructure/cloudflare/run_ddns.sh >> /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.log 2>&1
 
 # Meal Project data backup
 # Every Sunday at 11:00 PM
