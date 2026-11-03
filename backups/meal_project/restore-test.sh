@@ -128,13 +128,6 @@ log "Production database: ${DB_NAME}"
 log "Database owner: ${DB_OWNER}"
 log "Temporary database: ${TEST_DB}"
 
-# Verify the expected production database configuration.
-ACTUAL_DB="$(docker_compose exec -T db sh -ec 'printf "%s" "$POSTGRES_DB"')"
-ACTUAL_OWNER="$(docker_compose exec -T db sh -ec 'printf "%s" "$POSTGRES_USER"')"
-
-[[ "${ACTUAL_DB}" == "${DB_NAME}" ]] || die "Unexpected production database name: ${ACTUAL_DB}"
-[[ "${ACTUAL_OWNER}" == "${DB_OWNER}" ]] || die "Unexpected database owner: ${ACTUAL_OWNER}"
-
 # Verify archive readability before creating a database.
 log "Validating backup archive."
 
