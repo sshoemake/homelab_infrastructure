@@ -27,7 +27,7 @@ DB_NAME=""
 DB_OWNER=""
 
 readonly TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
-readonly TEST_DB="mealprojectdb_restore_test_${TIMESTAMP}_$$"
+TEST_DB=""
 
 DB_CREATED=false
 
@@ -75,8 +75,7 @@ else
             -name 'meal_project_weekly_*.dump' \
             -printf '%T@ %p\n' |
             sort -rn |
-            head -n 1 |
-            cut -d' ' -f2-
+            sed -n '1s/^[^ ]* //p'
     )"
 fi
 
@@ -109,20 +108,25 @@ docker_compose() {
         "$@"
 }
 
+# Confirm the production database container is running.
+DB_ID="$(docker_compose ps --status running -q db)"
+[[ -n "${DB_ID}" ]] || die "PostgreSQL service is not running."
+
+# Read database configuration from the running container.
 DB_NAME="$(docker_compose exec -T db sh -ec 'printf "%s" "$POSTGRES_DB"')"
 DB_OWNER="$(docker_compose exec -T db sh -ec 'printf "%s" "$POSTGRES_USER"')"
 
 [[ -n "${DB_NAME}" ]] || die "POSTGRES_DB is not configured."
 [[ -n "${DB_OWNER}" ]] || die "POSTGRES_USER is not configured."
 
+# Generate a unique temporary database name.
+TEST_DB="${DB_NAME}_restore_test_${TIMESTAMP}_$$"
+
 log "Starting Meal_Project restore test."
 log "Backup: ${BACKUP_FILE}"
 log "Production database: ${DB_NAME}"
+log "Database owner: ${DB_OWNER}"
 log "Temporary database: ${TEST_DB}"
-
-# Confirm the production database container is running.
-DB_ID="$(docker_compose ps --status running -q db)"
-[[ -n "${DB_ID}" ]] || die "PostgreSQL service is not running."
 
 # Verify the expected production database configuration.
 ACTUAL_DB="$(docker_compose exec -T db sh -ec 'printf "%s" "$POSTGRES_DB"')"
