@@ -7,7 +7,7 @@
 # Check public IP every 5 minutes
 */5 * * * * /home/odroid/homelab_infrastructure/cloudflare/run_ddns.sh >> /home/odroid/homelab_infrastructure/cloudflare/cloudflare_ddns.log 2>&1
 
-# Meal Project PostgreSQL weekly backup
+# Meal Project PostgreSQL backup, followed by remote synchronization
 # Every Sunday at 11:00 PM Arizona time (Monday 06:00 UTC)
 
-0 6 * * 1 /home/odroid/homelab_infrastructure/backups/meal_project/backup.sh >> /home/odroid/backups/meal_project/backup.log 2>&1
+0 6 * * 1 /home/odroid/homelab_infrastructure/backups/meal_project/backup.sh >> /home/odroid/backups/meal_project/backup.log 2>&1 && /home/odroid/homelab_infrastructure/backups/remote/sync.sh >> /home/odroid/backups/meal_project/remote_sync.log 2>&1
