@@ -1,0 +1,6 @@
+# Copy this file to paths.conf on the backup host, then list repository-relative
+# paths to sensitive files, one per line. Blank lines and # comments are ignored.
+#
+# Example entries (replace with files that exist on your host):
+# service/compose/.env.prod
+# reverse_proxy/data/acme.json

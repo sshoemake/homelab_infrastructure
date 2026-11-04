@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# Synchronize completed Meal_Project backups to a remote host.
+# Synchronize database backups and encrypted sensitive-file backups.
 #
 # Run from anywhere:
 #   ./backups/remote/sync.sh
 #
 # Configuration:
 #   backups/remote/.env
+#   backups/remote/paths.conf
 #
 # Remote files are never automatically deleted.
 
@@ -15,6 +16,8 @@ IFS=$'\n\t'
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly ENV_FILE="${SCRIPT_DIR}/.env"
+readonly PATHS_FILE="${SCRIPT_DIR}/paths.conf"
+readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 log() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -37,11 +40,13 @@ source "${ENV_FILE}"
 : "${REMOTE_BASE_DIR:?REMOTE_BASE_DIR is required}"
 : "${SSH_KEY:?SSH_KEY is required}"
 : "${LOCAL_BACKUP_DIR:?LOCAL_BACKUP_DIR is required}"
+: "${AGE_RECIPIENT:?AGE_RECIPIENT is required (age public recipient)}"
 
 SSH_PORT="${SSH_PORT:-22}"
 LOCK_WAIT_SECONDS="${LOCK_WAIT_SECONDS:-300}"
 
 REMOTE_BACKUP_DIR="${REMOTE_BASE_DIR%/}/meal_project"
+REMOTE_ENCRYPTED_DIR="${REMOTE_BASE_DIR%/}/encrypted"
 LOCK_FILE="${LOCAL_BACKUP_DIR}/operation.lock"
 
 # Validate configuration.
@@ -69,9 +74,14 @@ LOCK_FILE="${LOCAL_BACKUP_DIR}/operation.lock"
 [[ -f "${SSH_KEY}" ]] \
     || die "SSH private key not found: ${SSH_KEY}"
 
+[[ -f "${PATHS_FILE}" ]] \
+    || die "Sensitive-file list not found: ${PATHS_FILE}"
+
 command -v rsync >/dev/null 2>&1 || die "rsync is not installed."
 command -v ssh >/dev/null 2>&1 || die "ssh is not installed."
 command -v flock >/dev/null 2>&1 || die "flock is not installed."
+command -v age >/dev/null 2>&1 || die "age is not installed."
+command -v tar >/dev/null 2>&1 || die "tar is not installed."
 
 # Acquire a shared lock.
 # This prevents synchronization during a database backup and
@@ -95,6 +105,39 @@ BACKUP_FILES=("${LOCAL_BACKUP_DIR}"/*.dump)
 
 log "Found ${#BACKUP_FILES[@]} completed backup(s)."
 
+# Read a plain, one-path-per-line list. Paths are relative to the repository
+# root; comments and blank lines are ignored. Reject traversal and absolute paths.
+SENSITIVE_PATHS=()
+while IFS= read -r entry || [[ -n "${entry}" ]]; do
+    entry="${entry%%#*}"
+    entry="${entry#"${entry%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    [[ -n "${entry}" ]] || continue
+    [[ "${entry}" != /* && "${entry}" != *..* ]] \
+        || die "Invalid sensitive-file path in ${PATHS_FILE}: ${entry}"
+    [[ -f "${PROJECT_DIR}/${entry}" ]] \
+        || die "Sensitive file not found: ${PROJECT_DIR}/${entry}"
+    SENSITIVE_PATHS+=("${entry}")
+done < "${PATHS_FILE}"
+
+((${#SENSITIVE_PATHS[@]} > 0)) \
+    || die "No sensitive-file paths configured in ${PATHS_FILE}."
+
+SENSITIVE_ARCHIVE="${LOCAL_BACKUP_DIR}/sensitive_files_$(date '+%Y%m%d_%H%M%S')_$$.tar.age"
+TEMP_ENCRYPTED="$(mktemp "${LOCAL_BACKUP_DIR}/.sensitive_files.XXXXXX")"
+cleanup() {
+    rm -f -- "${TEMP_ENCRYPTED}"
+}
+trap cleanup EXIT
+
+log "Creating encrypted archive of ${#SENSITIVE_PATHS[@]} sensitive file(s)."
+tar -C "${PROJECT_DIR}" -cf - -- "${SENSITIVE_PATHS[@]}" \
+    | age --encrypt --recipient "${AGE_RECIPIENT}" --output "${TEMP_ENCRYPTED}" \
+    || die "Sensitive-file encryption failed."
+chmod 600 "${TEMP_ENCRYPTED}"
+mv -- "${TEMP_ENCRYPTED}" "${SENSITIVE_ARCHIVE}"
+log "Encrypted sensitive-file archive created: ${SENSITIVE_ARCHIVE}"
+
 # Configure SSH.
 SSH_ARGS=(
     -p "${SSH_PORT}"
@@ -112,7 +155,7 @@ log "Checking remote destination: ${SSH_TARGET}"
 
 # Create the remote destination if necessary.
 ssh "${SSH_ARGS[@]}" "${SSH_TARGET}" \
-    "mkdir -p -- '${REMOTE_BACKUP_DIR}' && chmod 700 -- '${REMOTE_BACKUP_DIR}'" \
+    "mkdir -p -- '${REMOTE_BACKUP_DIR}' '${REMOTE_ENCRYPTED_DIR}' && chmod 700 -- '${REMOTE_BACKUP_DIR}' '${REMOTE_ENCRYPTED_DIR}'" \
     || die "Unable to access or prepare remote destination."
 
 # Synchronize completed dumps.
@@ -132,6 +175,18 @@ rsync \
     "${SSH_TARGET}:${REMOTE_BACKUP_DIR}/" \
     || die "Remote synchronization failed."
 
+log "Synchronizing encrypted sensitive-file archive to ${REMOTE_HOST}:${REMOTE_ENCRYPTED_DIR}"
+rsync \
+    --archive \
+    --human-readable \
+    --partial \
+    --itemize-changes \
+    -e "${RSYNC_RSH}" \
+    "${SENSITIVE_ARCHIVE}" \
+    "${SSH_TARGET}:${REMOTE_ENCRYPTED_DIR}/" \
+    || die "Encrypted sensitive-file synchronization failed."
+
 log "Remote synchronization completed successfully."
 log "Synchronized ${#BACKUP_FILES[@]} backup(s)."
+log "Synchronized one encrypted sensitive-file archive."
 

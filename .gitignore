@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Local sensitive-file backup manifest
+backups/remote/paths.conf
+
 # Traefik ACME account and certificate storage
 traefik/data/acme.json
 traefik/data/*.json
