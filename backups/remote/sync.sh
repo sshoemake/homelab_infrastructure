@@ -101,6 +101,9 @@ SSH_ARGS=(
     -i "${SSH_KEY}"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
+    -o ConnectTimeout=10
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=2
 )
 
 SSH_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
@@ -113,7 +116,7 @@ ssh "${SSH_ARGS[@]}" "${SSH_TARGET}" \
     || die "Unable to access or prepare remote destination."
 
 # Synchronize completed dumps.
-RSYNC_RSH="ssh -p ${SSH_PORT} -i ${SSH_KEY} -o BatchMode=yes -o IdentitiesOnly=yes"
+RSYNC_RSH="ssh -p ${SSH_PORT} -i ${SSH_KEY} -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
 
 log "Synchronizing backups to ${REMOTE_HOST}:${REMOTE_BACKUP_DIR}"
 
