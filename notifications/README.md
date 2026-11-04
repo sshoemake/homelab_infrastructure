@@ -1,4 +1,15 @@
+# Infrastructure Notifications
 
+Centralized email notification utility for homelab infrastructure.
+
+Notifications are sent through Gmail SMTP using msmtp.
+
+## Components
+
+- `notify.sh`: Shared notification utility.
+- `msmtp/config.example`: Example Gmail SMTP configuration.
+
+## SMTP Configuration
 
 sudo apt update
 sudo apt install msmtp msmtp-mta ca-certificates
@@ -25,3 +36,33 @@ printf 'To: YOUR_DESTINATION_EMAIL\nSubject: Odroid M2 SMTP Test\n\nGmail SMTP n
 
 tail -20 ~/.config/msmtp/msmtp.log
 
+## Usage
+
+Send a success notification:
+
+    ./notifications/notify.sh success \
+        "Backup Completed" \
+        "Meal_Project backup completed successfully."
+
+Send a failure notification:
+
+    ./notifications/notify.sh failure \
+        "Backup Failed" \
+        "Meal_Project backup encountered an error."
+
+## Logging
+
+Notification activity is logged to:
+
+    ~/.local/state/homelab/notifications.log
+
+SMTP delivery details are logged separately to:
+
+    ~/.config/msmtp/msmtp.log
+
+## Security
+
+- SMTP credentials remain outside the repository.
+- Gmail authentication uses an App Password.
+- TLS is enabled for SMTP connections.
+- Notification logs are restricted to the owner.
