@@ -1,0 +1,17 @@
+# Gmail SMTP configuration
+
+defaults
+auth           on
+tls            on
+tls_starttls   on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /home/odroid/.config/msmtp/msmtp.log
+
+account        gmail
+host           smtp.gmail.com
+port           587
+from           YOUR_GMAIL_ADDRESS@gmail.com
+user           YOUR_GMAIL_ADDRESS@gmail.com
+password       YOUR_16_CHARACTER_APP_PASSWORD
+
+account default : gmail
