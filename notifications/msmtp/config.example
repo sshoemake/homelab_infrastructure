@@ -1,4 +1,5 @@
 # Gmail SMTP configuration
+# Install at: ~/.config/msmtp/config
 
 defaults
 auth           on
