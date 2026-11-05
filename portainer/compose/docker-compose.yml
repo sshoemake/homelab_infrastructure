@@ -1,3 +1,5 @@
+name: portainer
+
 services:
   portainer:
     image: portainer/portainer-ce:2.45.3
