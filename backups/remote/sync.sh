@@ -105,19 +105,58 @@ BACKUP_FILES=("${LOCAL_BACKUP_DIR}"/*.dump)
 
 log "Found ${#BACKUP_FILES[@]} completed backup(s)."
 
-# Read a plain, one-path-per-line list. Paths are relative to the repository
-# root; comments and blank lines are ignored. Reject traversal and absolute paths.
+# Read a plain, one-path-per-line list.
+# Repository-relative paths are supported.
+# Absolute paths are allowed only under the user's .config directory.
 SENSITIVE_PATHS=()
+TAR_ARGS=()
+
 while IFS= read -r entry || [[ -n "${entry}" ]]; do
     entry="${entry%%#*}"
     entry="${entry#"${entry%%[![:space:]]*}"}"
     entry="${entry%"${entry##*[![:space:]]}"}"
+
     [[ -n "${entry}" ]] || continue
-    [[ "${entry}" != /* && "${entry}" != *..* ]] \
-        || die "Invalid sensitive-file path in ${PATHS_FILE}: ${entry}"
-    [[ -f "${PROJECT_DIR}/${entry}" ]] \
-        || die "Sensitive file not found: ${PROJECT_DIR}/${entry}"
+
+    if [[ "${entry}" == /* ]]; then
+        # External configuration files must reside under ~/.config.
+        case "${entry}" in
+            "${HOME}"/.config/*)
+                ;;
+            *)
+                die "Unauthorized absolute sensitive-file path: ${entry}"
+                ;;
+        esac
+
+        # Reject directory traversal.
+        case "/${entry}/" in
+            */../*)
+                die "Invalid sensitive-file path: ${entry}"
+                ;;
+        esac
+
+        [[ -f "${entry}" && ! -L "${entry}" ]] \
+            || die "Sensitive file not found or not a regular file: ${entry}"
+
+        # Store the external file relative to filesystem root.
+        TAR_ARGS+=( -C / "${entry#/}" )
+
+    else
+        # Repository-relative paths cannot escape the project directory.
+        case "/${entry}/" in
+            */../*)
+                die "Invalid sensitive-file path: ${entry}"
+                ;;
+        esac
+
+        [[ -f "${PROJECT_DIR}/${entry}" ]] \
+            || die "Sensitive file not found: ${PROJECT_DIR}/${entry}"
+
+        TAR_ARGS+=( -C "${PROJECT_DIR}" "${entry}" )
+    fi
+
     SENSITIVE_PATHS+=("${entry}")
+
 done < "${PATHS_FILE}"
 
 ((${#SENSITIVE_PATHS[@]} > 0)) \
@@ -131,7 +170,7 @@ cleanup() {
 trap cleanup EXIT
 
 log "Creating encrypted archive of ${#SENSITIVE_PATHS[@]} sensitive file(s)."
-tar -C "${PROJECT_DIR}" -cf - -- "${SENSITIVE_PATHS[@]}" \
+tar -cf - "${TAR_ARGS[@]}" \
     | age --encrypt --recipient "${AGE_RECIPIENT}" --output "${TEMP_ENCRYPTED}" \
     || die "Sensitive-file encryption failed."
 chmod 600 "${TEMP_ENCRYPTED}"
