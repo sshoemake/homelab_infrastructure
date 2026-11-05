@@ -7,6 +7,12 @@
 
 Only the encrypted archive is sent to the remote host. The source copy is stored in `LOCAL_BACKUP_DIR` with mode `600`. Remote files are not automatically deleted. The `odroid` account must be able to read every listed source file; the archive preserves file modes for recovery.
 
+## Prerequisite
+
+sudo apt update
+sudo apt install age
+age --version
+
 ## Configuration
 
 Copy `.env.example` to `.env` on the Odroid and set the connection values plus `AGE_RECIPIENT` to an age **public recipient**. Copy `paths.conf.example` to `paths.conf` there, then add the actual repository-relative paths to back up. Both `.env` and `paths.conf` are local configuration and are not tracked by Git. Do not put a passphrase or private identity in `.env`. The private age identity is needed only for recovery and should be stored offline or on a separate trusted device. Install `age` on the Odroid before running the sync.
