@@ -1,3 +1,5 @@
+name: homeassistant
+
 services:
   homeassistant:
     container_name: homeassistant
