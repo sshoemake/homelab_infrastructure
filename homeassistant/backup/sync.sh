@@ -15,7 +15,7 @@ readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 readonly ENV_FILE="${PROJECT_DIR}/backups/remote/.env"
 readonly NOTIFY_SCRIPT="${PROJECT_DIR}/notifications/notify.sh"
 
-readonly LOCAL_BACKUP_DIR="${HOME}/homeassistant/config/backups"
+readonly HA_BACKUP_DIR="${HOME}/homeassistant/config/backups"
 readonly LOG_DIR="${HOME}/backups/homeassistant"
 readonly LOG_FILE="${LOG_DIR}/remote_sync.log"
 readonly LOCK_FILE="${LOG_DIR}/sync.lock"
@@ -56,7 +56,7 @@ log "Starting Home Assistant backup synchronization."
 
 [[ -f "${ENV_FILE}" ]] || die "Remote configuration not found: ${ENV_FILE}"
 [[ -x "${NOTIFY_SCRIPT}" ]] || die "Notification script missing or not executable."
-[[ -d "${LOCAL_BACKUP_DIR}" ]] || die "Home Assistant backup directory not found: ${LOCAL_BACKUP_DIR}"
+[[ -d "${HA_BACKUP_DIR}" ]] || die "Home Assistant backup directory not found: ${HA_BACKUP_DIR}"
 
 # This is a trusted, locally maintained configuration file.
 source "${ENV_FILE}"
@@ -114,7 +114,7 @@ log "Acquired Home Assistant sync lock."
 
 # Ignore archives modified within the last 15 minutes.
 mapfile -d '' -t BACKUP_FILES < <(
-    find "${LOCAL_BACKUP_DIR}" \
+    find "${HA_BACKUP_DIR}" \
         -maxdepth 1 \
         -type f \
         -name '*.tar' \
