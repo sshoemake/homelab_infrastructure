@@ -25,6 +25,11 @@ log() {
 }
 
 notify() {
+    if [[ "${HA_SYNC_NOTIFY:-1}" != "1" ]]; then
+        log "Notification suppressed; weekly wrapper owns notification."
+        return 0
+    fi
+
     local status="$1"
     local subject="$2"
     local message="$3"

@@ -29,6 +29,10 @@ readonly BACKUP_LOG="${LOG_DIR}/backup.log"
 readonly SYNC_LOG="${LOG_DIR}/remote_sync.log"
 readonly CYCLE_LOG="${LOG_DIR}/backup_cycle.log"
 
+readonly HA_SYNC_SCRIPT="${SCRIPT_DIR}/../homeassistant/backup/sync.sh"
+readonly HA_LOG_DIR="${HOME}/backups/homeassistant"
+readonly HA_SYNC_LOG="${HA_LOG_DIR}/remote_sync.log"
+
 # --------------------------------------------------
 # Functions
 # --------------------------------------------------
@@ -58,9 +62,9 @@ notify() {
 
 umask 077
 
-mkdir -p -- "${LOG_DIR}"
+mkdir -p -- "${LOG_DIR}" "${HA_LOG_DIR}"
 
-for file in "${BACKUP_SCRIPT}" "${SYNC_SCRIPT}" "${NOTIFY_SCRIPT}"; do
+for file in "${BACKUP_SCRIPT}" "${SYNC_SCRIPT}" "${NOTIFY_SCRIPT}" "${HA_SYNC_SCRIPT}"; do
     [[ -x "${file}" ]] || {
         log "ERROR: Required executable not found or not executable: ${file}"
         exit 1
@@ -127,17 +131,45 @@ ${CYCLE_LOG}" || true
 fi
 
 # --------------------------------------------------
-# Step 3: Success notification
+# Step 3: Home Assistant remote synchronization
 # --------------------------------------------------
 
-log "Weekly Meal_Project backup cycle completed successfully."
+log "Starting Home Assistant backup synchronization."
+
+if HA_SYNC_NOTIFY=0 "${HA_SYNC_SCRIPT}" >> "${HA_SYNC_LOG}" 2>&1; then
+    log "Home Assistant remote synchronization completed successfully."
+else
+    rc=$?
+    log "ERROR: Home Assistant remote synchronization failed (exit code ${rc})."
+
+    notify failure \
+        "Weekly Infrastructure Backup Failed" \
+        "Meal_Project backup and synchronization succeeded, but Home Assistant synchronization failed on $(hostname).
+
+Exit code: ${rc}
+
+Home Assistant synchronization log:
+${HA_SYNC_LOG}
+
+Weekly cycle log:
+${CYCLE_LOG}" || true
+
+    exit "${rc}"
+fi
+
+# --------------------------------------------------
+# Step 4: Success notification
+# --------------------------------------------------
+
+log "Weekly Infrastructure backup cycle completed successfully."
 
 notify success \
-    "Meal_Project Backup Completed" \
-    "The weekly Meal_Project backup cycle completed successfully on $(hostname).
+    "Infrastructure Backup Completed" \
+    "The weekly infrastructure backup cycle completed successfully on $(hostname).
 
 PostgreSQL backup: SUCCESS
 Remote synchronization: SUCCESS
+Home Assistant remote synchronization: SUCCESS
 
 Backup log:
 ${BACKUP_LOG}
@@ -146,7 +178,10 @@ Synchronization log:
 ${SYNC_LOG}
 
 Cycle log:
-${CYCLE_LOG}" || exit 1
+${CYCLE_LOG}
+
+Home Assistant synchronization log:
+${HA_SYNC_LOG}" || exit 1
 
 log "Weekly backup cycle finished."
 exit 0
