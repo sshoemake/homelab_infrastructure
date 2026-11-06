@@ -1,22 +1,24 @@
 # Home Assistant Backup Synchronization
 
-This directory contains the script used to synchronize native Home Assistant
-backup archives from the M2 to the C5.
+This directory contains the script used to synchronize native Home Assistant backup archives from the M2 to the C5.
 
 ## Overview
 
 Home Assistant creates its own backup archives in:
 
-    /home/odroid/homeassistant/config/backups
+```text
+/home/odroid/homeassistant/config/backups/
+```
 
 The synchronization script copies completed `.tar` archives to:
 
-    odroidc5.local:/home/odroid/homelab_backups/homeassistant
+```text
+odroidc5.local:/home/odroid/homelab_backups/homeassistant/
+```
 
-The native Home Assistant backup archives are copied unchanged.
+The native Home Assistant backup archives are copied unchanged. No additional encryption is performed by this script. The Home Assistant backup format and its existing protection are preserved.
 
-No additional encryption is performed by this script. Home Assistant's
-backup format and its existing protection are preserved.
+Protect Home Assistant backup credentials and recovery material separately from both hosts.
 
 ## Files
 
@@ -27,9 +29,11 @@ backup format and its existing protection are preserved.
 
 ## Configuration
 
-The script reuses the existing remote configuration:
+The script reuses the remote connection configuration:
 
-    backups/remote/.env
+```text
+backups/remote/.env
+```
 
 Required settings:
 
@@ -42,88 +46,115 @@ Optional setting:
 
 - `SSH_PORT` (defaults to 22)
 
-The script uses the shared notification utility:
+The script also uses:
 
-    notifications/notify.sh
+```text
+notifications/notify.sh
+```
 
-No separate email or SSH configuration is required.
+No separate SSH configuration is required.
 
-## Local Backup Location
+## Local backup selection
 
-    /home/odroid/homeassistant/config/backups
+Local backup directory:
 
-Only regular `.tar` files modified more than 15 minutes ago are selected.
+```text
+/home/odroid/homeassistant/config/backups/
+```
 
-Before transferring each archive, the script checks its outer tar archive
-integrity.
+Only regular `.tar` files modified more than 15 minutes ago are selected. This avoids copying an archive while Home Assistant may still be writing it.
 
-## Remote Backup Location
+Before transfer, the script checks each selected archive using `tar -tf`.
 
-    /home/odroid/homelab_backups/homeassistant
+## Remote backup location
 
-The remote directory is created if necessary and assigned permissions of 700.
+```text
+/home/odroid/homelab_backups/homeassistant/
+```
+
+The remote directory is created if necessary and assigned permissions of `700`.
 
 Remote backup files are never automatically deleted.
 
-## Synchronization and Verification
+## Synchronization and verification
 
 The script:
 
 1. Loads the existing remote connection configuration.
 2. Acquires a dedicated Home Assistant synchronization lock.
 3. Finds completed Home Assistant `.tar` archives.
-4. Checks the integrity of each selected archive.
-5. Connects to the C5 using the existing SSH key.
+4. Checks the integrity of each selected outer tar archive.
+5. Connects to the C5 using the configured SSH key.
 6. Synchronizes the archives using rsync.
 7. Compares local and remote SHA256 checksums.
 8. Sends a success or failure email notification.
 
-A successful run means the selected files were transferred and their
-SHA256 checksums matched.
+A successful run means the selected files were transferred and their SHA256 checksums matched.
 
 This does not constitute a full Home Assistant restore test.
 
-## Logging
-
-Log file:
-
-    ~/backups/homeassistant/remote_sync.log
-
-The synchronization lock is:
-
-    ~/backups/homeassistant/sync.lock
-
-The log directory is private to the odroid user.
-
-## Manual Execution
+## Manual execution
 
 From the infrastructure repository:
 
-    ./homeassistant/backup/sync.sh
+```bash
+cd ~/homelab_infrastructure
+./homeassistant/backup/sync.sh
+```
 
 The script can also be run from another working directory.
 
-## Permissions
+When run manually, it sends its own success or failure notification.
 
-The script should be executable:
+During the weekly infrastructure backup cycle, the wrapper sets `HA_SYNC_NOTIFY=0` so only one consolidated email is sent.
 
-    chmod 750 homeassistant/backup/sync.sh
+## Weekly integration
+
+The weekly wrapper:
+
+```text
+backups/run_weekly_backup.sh
+```
+
+runs Home Assistant synchronization after the Meal_Project backup and remote synchronization stages.
+
+The existing cron schedule remains:
+
+- Sunday at 11:00 PM Arizona time.
+- Monday at 06:00 UTC.
+
+See [Infrastructure Backup Overview](../../backups/README.md) and [Cron README](../../cron/README.md).
+
+## Logging and locking
+
+Log file:
+
+```text
+~/backups/homeassistant/remote_sync.log
+```
+
+Synchronization lock:
+
+```text
+~/backups/homeassistant/sync.lock
+```
+
+The log directory is private to the `odroid` user.
 
 ## Retention
 
-The script does not delete local or remote backups.
+The synchronization script does not delete local or remote backups.
 
-Home Assistant manages its own local automatic backup retention.
-Remote retention is managed separately and should only be introduced after
-the synchronization process has been validated.
+Home Assistant manages its own local automatic backup retention. Remote retention is managed separately.
 
-## Recovery Considerations
+Do not add automatic remote pruning until the retention policy and recovery process have been tested.
+
+## Recovery considerations
 
 The remote archives are an additional copy of Home Assistant's native backups.
 
-A successful synchronization and checksum comparison verifies that the
-remote copy matches the local archive. It does not prove that Home Assistant
-can successfully restore that backup.
+A successful synchronization and checksum comparison verifies that the remote copy matches the local archive. It does not prove that Home Assistant can successfully restore that backup.
 
-Periodically verify that a backup can be restored using Home Assistant's
-supported restore process.
+Use Home Assistant's supported restore process and the appropriate backup credentials or recovery material.
+
+A full restore test has not yet been completed for this deployment. Treat restore validation as outstanding until it has been performed successfully.

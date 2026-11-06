@@ -296,3 +296,23 @@ After recovery, verify application configuration and functionality before restar
 - `backups/remote/` - Remote synchronization and encrypted configuration backups.
 - `notifications/` - Backup and infrastructure notification scripts.
 - `cron/` - Scheduled infrastructure tasks.
+
+## Home Assistant backups
+
+Home Assistant backup synchronization is handled by a separate script:
+
+```text
+homeassistant/backup/sync.sh
+```
+
+It reuses the SSH connection settings in this directory's `.env` file but does not use the Meal_Project operation lock or the age-encryption workflow described above.
+
+Native Home Assistant `.tar` backup archives are copied unchanged to:
+
+```text
+/home/odroid/homelab_backups/homeassistant/
+```
+
+The script checks outer archive integrity before transfer and verifies remote SHA256 checksums afterward. It does not automatically delete remote archives.
+
+The weekly infrastructure wrapper invokes this script after the Meal_Project backup and remote synchronization stages. See [Home Assistant Backup Synchronization](../../homeassistant/backup/README.md).
