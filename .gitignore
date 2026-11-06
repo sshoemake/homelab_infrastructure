@@ -15,3 +15,7 @@ traefik/data/*.json
 .vscode/
 .idea/
 *.swp
+
+# Python
+__pycache__/
+*.py[cod]
