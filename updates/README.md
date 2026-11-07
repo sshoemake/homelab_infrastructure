@@ -2,15 +2,15 @@
 # Infrastructure Discovery and Monitoring
 
 This directory contains read-only tools for discovering Docker infrastructure,
-checking application health, and eventually monitoring available software updates.
+checking application health, and consolidating monitoring results.
 
 The monitoring system is designed to:
 
 - Discover active Docker containers and their configuration.
 - Identify currently running application versions.
 - Check container, application, and dependency health.
+- Produce consolidated human-readable and JSON reports.
 - Compare installed versions against available upstream releases (planned).
-- Produce consolidated reports.
 - Send notifications when problems or updates are detected (planned).
 
 Monitoring scripts do not deploy updates, restart containers, or modify application
@@ -22,6 +22,7 @@ configuration.
 |---|---|---|
 | Discovery | `discover.sh` / `discover.py` | Discover Docker containers, images, versions, and metadata |
 | Health monitoring | `health.sh` / `health.py` | Check container, application, and dependency health |
+| Consolidated monitoring | `monitor.sh` / `monitor.py` | Combine discovery and health results into one report |
 | Update monitoring | Planned | Compare running versions against upstream releases |
 | Notifications | Planned integration | Deliver consolidated reports and alerts |
 
@@ -46,10 +47,16 @@ version.
 
 ### Run discovery
 
-From any directory:
+Human-readable report:
 
 ```bash
 ~/homelab_infrastructure/updates/discover.sh
+```
+
+Machine-readable JSON:
+
+```bash
+~/homelab_infrastructure/updates/discover.sh --json
 ```
 
 Discovery is read-only.
@@ -101,7 +108,7 @@ failures identify partial problems without overstating a complete outage.
 For Meal Project, the primary `sshoemake.com` route and database dependency
 are critical. The `www.sshoemake.com` route is secondary.
 
-### Exit codes
+### Health check exit codes
 
 | Exit code | Meaning |
 |---|---|
@@ -120,6 +127,75 @@ are critical. The `www.sshoemake.com` route is secondary.
   dependency check.
 - Services without Docker healthchecks rely on their application-specific checks.
 
+## Consolidated Monitoring
+
+The consolidated monitor runs discovery and health monitoring independently,
+then combines their JSON results into one report.
+
+It does not parse human-readable terminal output. Each component remains
+independently usable.
+
+### Run consolidated monitoring
+
+Human-readable report:
+
+```bash
+~/homelab_infrastructure/updates/monitor.sh
+```
+
+Machine-readable JSON:
+
+```bash
+~/homelab_infrastructure/updates/monitor.sh --json
+```
+
+The consolidated report includes:
+
+- Host and report timestamp.
+- Overall monitoring status.
+- Individual discovery and health report status.
+- Service health summary.
+- Container inventory summary.
+- Active and rollback container counts.
+- Service-to-container matching results.
+- Current detected version for each monitored service.
+- Individual health check results.
+- Monitoring errors, if any.
+- Explicit read-only indicator.
+
+A service without a matching discovered container is reported as `UNKNOWN`.
+Unrecognized service statuses are also normalized to `UNKNOWN`.
+
+If discovery or health report execution fails, the overall status is `ERROR`.
+The other component is still executed so that partial results can be retained.
+
+### Consolidated monitor exit codes
+
+| Exit code | Meaning |
+|---|---|
+| `0` | All monitored services are healthy |
+| `1` | One or more services are degraded or down |
+| `2` | One or more services have an unknown status |
+| `3` | Discovery or health monitoring failed, or returned an invalid report |
+
+### JSON output
+
+The JSON report is intended for future integrations, including version
+comparison, scheduled reporting, and notifications.
+
+Example:
+
+```bash
+~/homelab_infrastructure/updates/monitor.sh --json \
+  > /tmp/monitor.json
+
+python3 -m json.tool /tmp/monitor.json
+```
+
+The report contains top-level `summary`, `services`, `containers`, and `errors`
+sections, along with host, timestamp, status, component results, and the
+`read_only` indicator.
+
 ## Design Principles
 
 - **Read-only:** Monitoring does not change infrastructure.
@@ -128,9 +204,10 @@ are critical. The `www.sshoemake.com` route is secondary.
 - **Application-aware:** Container status alone is insufficient to establish
   application health.
 - **Explicit criticality:** Critical and noncritical checks are distinguished.
-- **Extensible:** New services can be added with service-specific checks.
-- **Consolidated reporting:** Health and version information will eventually
-  be combined into a single report.
+- **Consolidated reporting:** Discovery and health results are combined into
+  one machine-readable or human-readable report.
+- **Extensible:** New services and monitoring capabilities can be added
+  independently.
 
 ## Future Development
 
@@ -138,10 +215,9 @@ Planned improvements:
 
 1. Add upstream version discovery for monitored images and applications.
 2. Compare running, configured, and latest available versions.
-3. Combine discovery, version, and health results into a consolidated report.
-4. Integrate the existing infrastructure email notification system.
-5. Schedule a daily monitoring report.
-6. Add lightweight recurring health checks with outage and recovery notifications.
-7. Consider independent monitoring from the Odroid C5.
+3. Integrate the existing infrastructure email notification system.
+4. Schedule a daily monitoring report.
+5. Add lightweight recurring health checks with outage and recovery notifications.
+6. Consider independent monitoring from the Odroid C5.
 
 Updates will remain informational. Deployment decisions will remain manual.
