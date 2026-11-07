@@ -50,11 +50,12 @@ def command(args, timeout=TIMEOUT):
         return False, "", str(exc)
 
 
-def add_check(service, name, status, detail):
+def add_check(service, name, status, detail, critical=False):
     service["checks"].append({
         "name": name,
         "status": status,
         "detail": detail,
+        "critical": critical,
     })
 
 
@@ -67,7 +68,13 @@ def inspect_container(name):
     ])
 
     if not ok:
-        return None, None, error or "Container not found or Docker unavailable"
+        detail = error or "Docker inspect failed"
+
+        # Distinguish a missing container from a Docker daemon problem.
+        if "No such object" in detail or "No such container" in detail:
+            return "missing", None, None
+
+        return None, None, detail
 
     parts = output.split("|", 1)
     if len(parts) != 2:
@@ -180,15 +187,21 @@ def check_django_database():
 
 
 def service_status(service):
-    statuses = [check["status"] for check in service["checks"]]
+    checks = service["checks"]
 
-    if "FAIL" in statuses:
+    if any(
+        check["status"] == "FAIL" and check.get("critical", False)
+        for check in checks
+    ):
         return "DOWN"
 
-    if "WARN" in statuses:
+    if any(check["status"] == "UNKNOWN" for check in checks):
+        return "UNKNOWN"
+
+    if any(check["status"] in ("FAIL", "WARN") for check in checks):
         return "DEGRADED"
 
-    if not statuses or all(status == "SKIP" for status in statuses):
+    if not checks or all(check["status"] == "SKIP" for check in checks):
         return "UNKNOWN"
 
     return "HEALTHY"
@@ -215,8 +228,9 @@ def build_report():
             add_check(
                 service,
                 "Container",
-                "FAIL",
+                "UNKNOWN",
                 error,
+                critical=True,
             )
             service["status"] = service_status(service)
             report["services"].append(service)
@@ -228,6 +242,7 @@ def build_report():
                 "Container",
                 "FAIL",
                 f"Container state is {state}",
+                critical=True,
             )
             service["status"] = service_status(service)
             report["services"].append(service)
@@ -243,7 +258,7 @@ def build_report():
         if docker_health == "healthy":
             add_check(service, "Docker health", "PASS", "Docker reports healthy")
         elif docker_health == "unhealthy":
-            add_check(service, "Docker health", "FAIL", "Docker reports unhealthy")
+            add_check(service, "Docker health", "FAIL", "Docker reports unhealthy", critical=True)
         elif docker_health == "starting":
             add_check(service, "Docker health", "WARN", "Docker healthcheck is starting")
         else:
@@ -256,7 +271,7 @@ def build_report():
 
         if service_name == "Home Assistant":
             status, detail = check_http("http://127.0.0.1:8123/", "Home Assistant")
-            add_check(service, "Application HTTP", status, detail)
+            add_check(service, "Application HTTP", status, detail, critical=True)
 
         elif service_name == "Portainer":
             status, detail = check_http(
@@ -264,7 +279,7 @@ def build_report():
                 "Portainer API",
                 verify_tls=False,
             )
-            add_check(service, "Application API", status, detail)
+            add_check(service, "Application API", status, detail, critical=True)
 
         elif service_name == "Meal Project":
             for hostname in ("sshoemake.com", "www.sshoemake.com"):
@@ -274,14 +289,15 @@ def build_report():
                     f"HTTPS route ({hostname})",
                     status,
                     detail,
+                    critical=(hostname == "sshoemake.com"),
                 )
 
             status, detail = check_django_database()
-            add_check(service, "Database dependency", status, detail)
+            add_check(service, "Database dependency", status, detail, critical=True)
 
         elif service_name == "PostgreSQL":
             status, detail = check_postgres()
-            add_check(service, "PostgreSQL readiness", status, detail)
+            add_check(service, "PostgreSQL readiness", status, detail, critical=True)
 
         elif service_name == "Traefik":
             for port in (80, 443):
@@ -291,6 +307,7 @@ def build_report():
                     f"Listener port {port}",
                     status,
                     detail,
+                    critical=True,
                 )
 
         service["status"] = service_status(service)
