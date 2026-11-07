@@ -11,3 +11,7 @@
 # Every Sunday at 11:00 PM Arizona time (Monday 06:00 UTC)
 
 0 6 * * 1 /home/odroid/homelab_infrastructure/backups/run_weekly_backup.sh
+
+# Daily health and install status
+# everyday at 8:00 am Arizona time
+0 15 * * * /home/odroid/homelab_infrastructure/updates/daily_report.sh >> /home/odroid/.local/state/homelab/daily_report_cron.log 2>&1
