@@ -7,6 +7,7 @@ Reports all containers, including stopped containers.
 Does not deploy, restart, pull, remove, or modify anything.
 """
 
+import argparse
 import json
 import re
 import ssl
@@ -146,25 +147,30 @@ def detect_version(container, container_data, image_data):
     return image_tag(image), "Configured image tag"
 
 
+
 def main():
+    parser = argparse.ArgumentParser(
+        description="Read-only Docker infrastructure discovery"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON instead of a text report",
+    )
+    args = parser.parse_args()
+
     try:
         container_ids = docker("ps", "-aq", "--no-trunc").split()
     except (RuntimeError, subprocess.TimeoutExpired) as error:
         print(f"ERROR: Unable to query Docker: {error}", file=sys.stderr)
         return 1
 
-    print("=" * 72)
-    print("HOMELAB INFRASTRUCTURE DISCOVERY")
-    print("=" * 72)
-    print(f"Containers discovered: {len(container_ids)}")
-    print()
-
-    if not container_ids:
-        print("No Docker containers found.")
-        return 0
-
     try:
-        containers = json.loads(docker("inspect", *container_ids))
+        containers = (
+            json.loads(docker("inspect", *container_ids))
+            if container_ids
+            else []
+        )
     except (RuntimeError, json.JSONDecodeError) as error:
         print(f"ERROR: Unable to inspect containers: {error}", file=sys.stderr)
         return 1
@@ -177,6 +183,7 @@ def main():
         "unhealthy": 0,
         "no_healthcheck": 0,
     }
+    records = []
 
     for container in sorted(
         containers,
@@ -229,28 +236,65 @@ def main():
         architecture = image_data.get("Architecture", "unknown")
         operating_system = image_data.get("Os", "unknown")
 
-        print("-" * 72)
-        print(f"Container:       {name}")
-        print(f"Role:            {'ROLLBACK' if rollback else 'ACTIVE'}")
-        print(f"Compose project: {project}")
-        print(f"Compose service: {service}")
-        print(f"State:           {status}")
-        print(f"Docker health:   {health or 'not configured'}")
-        print(f"Image:           {image}")
-        print(f"Current version: {version}")
-        print(f"Version source:  {version_source}")
-        print(f"Image ID:        {image_id}")
-        print(f"Image digest:    {digest}")
-        print(f"Platform:        {operating_system}/{architecture}")
+        records.append({
+            "name": name,
+            "role": "ROLLBACK" if rollback else "ACTIVE",
+            "compose_project": project,
+            "compose_service": service,
+            "state": status,
+            "running": running,
+            "docker_health": health or "not configured",
+            "image": image,
+            "current_version": version,
+            "version_source": version_source,
+            "image_id": image_id,
+            "image_digest": digest,
+            "platform": f"{operating_system}/{architecture}",
+            "exit_code": state.get("ExitCode") if not running else None,
+        })
 
-        if not running:
-            print(f"Exit code:       {state.get('ExitCode', 'unknown')}")
+    report = {
+        "containers": records,
+        "summary": {
+            "total": len(records),
+            **counts,
+        },
+        "read_only": True,
+    }
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+
+    print("=" * 72)
+    print("HOMELAB INFRASTRUCTURE DISCOVERY")
+    print("=" * 72)
+    print(f"Containers discovered: {len(records)}")
+    print()
+
+    for record in records:
+        print("-" * 72)
+        print(f"Container:       {record['name']}")
+        print(f"Role:            {record['role']}")
+        print(f"Compose project: {record['compose_project']}")
+        print(f"Compose service: {record['compose_service']}")
+        print(f"State:           {record['state']}")
+        print(f"Docker health:   {record['docker_health']}")
+        print(f"Image:           {record['image']}")
+        print(f"Current version: {record['current_version']}")
+        print(f"Version source:  {record['version_source']}")
+        print(f"Image ID:        {record['image_id']}")
+        print(f"Image digest:    {record['image_digest']}")
+        print(f"Platform:        {record['platform']}")
+
+        if not record["running"]:
+            print(f"Exit code:       {record['exit_code']}")
 
     print()
     print("=" * 72)
     print("DISCOVERY SUMMARY")
     print("=" * 72)
-    print(f"Total containers:       {len(containers)}")
+    print(f"Total containers:       {len(records)}")
     print(f"Running:                {counts['running']}")
     print(f"Stopped:                {counts['stopped']}")
     print(f"Docker healthy:         {counts['healthy']}")
