@@ -12,6 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 DISCOVER_SCRIPT = SCRIPT_DIR / "discover.sh"
 HEALTH_SCRIPT = SCRIPT_DIR / "health.sh"
+UPDATE_SCRIPT = SCRIPT_DIR / "update_check.sh"
 
 HEALTH_EXIT_CODES = {0, 1, 2}
 
@@ -68,7 +69,7 @@ def aggregate_status(services):
 
 
 def build_report():
-    """Combine discovery and health reports."""
+    """Combine discovery, health, and upstream update reports."""
 
     discovery, discovery_error = run_json_script(
         DISCOVER_SCRIPT,
@@ -78,6 +79,12 @@ def build_report():
     health, health_error = run_json_script(
         HEALTH_SCRIPT,
         HEALTH_EXIT_CODES,
+    )
+
+    updates_report, update_error = run_json_script(
+        UPDATE_SCRIPT,
+        {0},
+        timeout=90,
     )
 
     if discovery is not None and (
@@ -105,6 +112,20 @@ def build_report():
         health = None
         health_error = (
             "health.sh returned valid JSON with an invalid structure"
+        )
+
+    if updates_report is not None and (
+        not isinstance(updates_report, dict)
+        or not isinstance(updates_report.get("updates"), list)
+        or not all(
+            isinstance(update, dict)
+            for update in updates_report["updates"]
+        )
+        or not isinstance(updates_report.get("summary", {}), dict)
+    ):
+        updates_report = None
+        update_error = (
+            "update_check.sh returned valid JSON with an invalid structure"
         )
 
     errors = [
@@ -166,6 +187,34 @@ def build_report():
         discovery.get("summary", {}) if discovery else {}
     )
 
+    updates = (
+        updates_report.get("updates", []) if updates_report else []
+    )
+
+    update_summary = (
+        updates_report.get("summary", {}) if updates_report else {}
+    )
+
+    update_statuses = {
+        update.get("status", "UNKNOWN").upper()
+        for update in updates
+    }
+
+    valid_update_statuses = {
+        "UPDATE_AVAILABLE",
+        "UP_TO_DATE",
+        "CURRENT_AHEAD",
+    }
+
+    if update_error:
+        update_check_status = "ERROR"
+    elif not updates or not update_statuses.issubset(
+        valid_update_statuses
+    ):
+        update_check_status = "UNKNOWN"
+    else:
+        update_check_status = "OK"
+
     summary = {
         "services_total": len(services),
         "healthy": sum(
@@ -187,6 +236,11 @@ def build_report():
             container.get("role") == "ROLLBACK"
             for container in discovered_containers
         ),
+        "updates_checked": update_summary.get("checked", 0),
+        "updates_available": update_summary.get("update_available", 0),
+        "updates_up_to_date": update_summary.get("up_to_date", 0),
+        "updates_current_ahead": update_summary.get("current_ahead", 0),
+        "updates_unknown": update_summary.get("unknown", 0),
     }
 
     return {
@@ -196,15 +250,18 @@ def build_report():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": overall_status,
         "health_status": health_status,
+        "update_check_status": update_check_status,
         "summary": summary,
         "discovery_status": "ERROR" if discovery_error else "OK",
         "health_report_status": "ERROR" if health_error else "OK",
+        "update_error": update_error,
         "health_duration_seconds": (
             health.get("duration_seconds") if health else None
         ),
         "errors": errors,
         "services": services,
         "containers": discovered_containers,
+        "updates": updates,
         "read_only": True,
     }
 
@@ -221,6 +278,7 @@ def print_text_report(report):
     print(f"Health status:     {report['health_status']}")
     print(f"Discovery:         {report['discovery_status']}")
     print(f"Health report:     {report['health_report_status']}")
+    print(f"Update check:      {report['update_check_status']}")
 
     summary = report["summary"]
 
@@ -236,6 +294,34 @@ def print_text_report(report):
     print(f"Running:             {summary['containers_running']}")
     print(f"Stopped:             {summary['containers_stopped']}")
     print(f"Rollback containers: {summary['rollback_containers']}")
+
+    print()
+    print("UPSTREAM IMAGE UPDATES")
+    print("-" * 72)
+    print(f"Images checked:    {summary['updates_checked']}")
+    print(f"Updates available: {summary['updates_available']}")
+    print(f"Up to date:        {summary['updates_up_to_date']}")
+    print(f"Current ahead:     {summary['updates_current_ahead']}")
+    print(f"Unknown:           {summary['updates_unknown']}")
+
+    for update in report["updates"]:
+        print()
+        print(
+            f"{update.get('service', 'Unknown')} - "
+            f"{update.get('status', 'UNKNOWN')}"
+        )
+        print(f"  Container:       {update.get('container', 'unknown')}")
+        print(f"  Current version: {update.get('current_version', 'unknown')}")
+        print(f"  Latest version:  {update.get('latest_version', 'unknown')}")
+        print(f"  Platform:        {update.get('platform', 'unknown')}")
+        print(f"  Registry:        {update.get('registry', 'unknown')}")
+
+        if update.get("error"):
+            print(f"  Error:           {update['error']}")
+
+    if report["update_error"]:
+        print()
+        print(f"Update checker error: {report['update_error']}")
 
     print()
     print("SERVICE DETAILS")
