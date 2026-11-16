@@ -107,7 +107,7 @@ log "Found ${#BACKUP_FILES[@]} completed backup(s)."
 
 # Read a plain, one-path-per-line list.
 # Repository-relative paths are supported.
-# Absolute paths are allowed only under the user's .config directory.
+# Absolute paths are allowed under .config and explicitly approved .ssh files.
 SENSITIVE_PATHS=()
 TAR_ARGS=()
 
@@ -119,9 +119,17 @@ while IFS= read -r entry || [[ -n "${entry}" ]]; do
     [[ -n "${entry}" ]] || continue
 
     if [[ "${entry}" == /* ]]; then
-        # External configuration files must reside under ~/.config.
+        # External files must be under ~/.config or explicitly approved ~/.ssh paths.
         case "${entry}" in
             "${HOME}"/.config/*)
+                ;;
+            "${HOME}"/.ssh/authorized_keys|\
+            "${HOME}"/.ssh/config|\
+            "${HOME}"/.ssh/github_homelab|\
+            "${HOME}"/.ssh/github_homelab.pub|\
+            "${HOME}"/.ssh/homelab_backup|\
+            "${HOME}"/.ssh/homelab_backup.pub|\
+            "${HOME}"/.ssh/known_hosts)
                 ;;
             *)
                 die "Unauthorized absolute sensitive-file path: ${entry}"

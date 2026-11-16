@@ -134,21 +134,36 @@ portainer/compose/.env
 
 **Approved absolute paths**
 
-Absolute paths are supported for external configuration files located under the user's `~/.config/` directory.
+Absolute paths are supported for external configuration files located under
+the user's `~/.config/` directory and a specific allowlist of SSH recovery files.
 
 Example:
 
 ```text
 /home/odroid/.config/msmtp/config
+/home/odroid/.ssh/authorized_keys
+/home/odroid/.ssh/config
+/home/odroid/.ssh/github_homelab
+/home/odroid/.ssh/github_homelab.pub
+/home/odroid/.ssh/homelab_backup
+/home/odroid/.ssh/homelab_backup.pub
+/home/odroid/.ssh/known_hosts
 ```
 
 The script applies the following validation:
 
 - Repository-relative paths cannot contain directory traversal (`..`).
-- Absolute paths must be inside the user's `.config` directory.
+- Absolute paths must be inside the user's `.config` directory or match an explicitly approved SSH file.
 - Absolute paths must exist and be regular files.
 - Symbolic links are not accepted for absolute paths.
 - Unauthorized absolute paths are rejected.
+
+The SSH allowlist is intentionally restricted. Other files under `~/.ssh`,
+including `known_hosts.old`, are not included.
+
+The SSH private keys are included only in the locally encrypted age archive.
+The age private identity required to decrypt that archive must be protected
+separately and must not be stored on the C5.
 
 Do not use `~` in paths. Specify the complete absolute path instead.
 
